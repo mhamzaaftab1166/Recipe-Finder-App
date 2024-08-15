@@ -1,44 +1,76 @@
-import React, { useState, useEffect } from "react";
-import { ScrollView, StyleSheet, Text, View, TextInput } from "react-native";
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+  ActivityIndicator,
+} from "react-native";
 import axios from "axios";
 import Card from "../components/Card";
 import SafeScreen from "../components/SafeScreen";
+import colors from "../config/colors";
 
-const HomeScreen = () => {
+const HomeScreen = ({ navigation, route }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [recipes, setRecipes] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
 
-  //API key
   const apiKey = "f10137d73cde429badd1d15074502dfe";
 
-  useEffect(() => {
-    const fetchRecipes = async () => {
-      setLoading(true);
+  // Fetch recipes function
+  const fetchRecipes = useCallback(
+    async (pageNumber) => {
+      setLoading(pageNumber === 1); // Set loading to true only for the first page
+      setLoadingMore(pageNumber > 1); // Set loadingMore to true for subsequent pages
+
       try {
         const response = await axios.get(
-          `https://api.spoonacular.com/recipes/random?apiKey=${apiKey}&number=10`
+          `https://api.spoonacular.com/recipes/random?apiKey=${apiKey}&number=30&offset=${
+            (pageNumber - 1) * 10
+          }`
         );
-        setRecipes(response.data.recipes);
+        const newRecipes = response.data.recipes;
+
+        setRecipes((prevRecipes) => [...prevRecipes, ...newRecipes]);
         setError(null);
+
+        // Check if there are more recipes to load
+        if (newRecipes.length < 30) {
+          setHasMore(false);
+        }
       } catch (e) {
         setError("Failed to fetch recipes. Please try again later.");
         console.error(e);
       } finally {
         setLoading(false);
+        setLoadingMore(false);
       }
-    };
+    },
+    [apiKey]
+  );
 
-    fetchRecipes();
-  }, []);
+  useEffect(() => {
+    fetchRecipes(page);
+  }, [fetchRecipes, page]);
+
+  const handleLoadMore = () => {
+    if (!loadingMore && hasMore) {
+      setPage((prevPage) => prevPage + 1);
+    }
+  };
 
   const filteredRecipes = recipes.filter((recipe) =>
     recipe.title.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
-    <SafeScreen>
+    <>
       <View style={styles.container}>
         <TextInput
           style={styles.searchInput}
@@ -53,9 +85,21 @@ const HomeScreen = () => {
         ) : filteredRecipes.length === 0 ? (
           <Text style={styles.noResultsText}>No recipes found</Text>
         ) : (
-          <ScrollView>
+          <ScrollView
+            onScroll={({ nativeEvent }) => {
+              const { contentOffset, layoutMeasurement } = nativeEvent;
+              const contentHeight = contentOffset.y + layoutMeasurement.height;
+              const isCloseToBottom =
+                contentHeight >= layoutMeasurement.height * 1.5;
+              if (isCloseToBottom) {
+                handleLoadMore();
+              }
+            }}
+            scrollEventThrottle={400}
+          >
             {filteredRecipes.map((recipe, index) => (
               <Card
+                onPress={() => navigation.navigate("recipeDetails", { recipe })}
                 key={index}
                 title={recipe.title}
                 subTitle={recipe.summary.replace(/<[^>]+>/g, "")}
@@ -63,10 +107,13 @@ const HomeScreen = () => {
                 imageUrl={recipe.image}
               />
             ))}
+            {loadingMore && (
+              <ActivityIndicator size="large" color={colors.primary} />
+            )}
           </ScrollView>
         )}
       </View>
-    </SafeScreen>
+    </>
   );
 };
 
@@ -77,11 +124,12 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     height: 40,
-    borderColor: "#ddd",
-    borderWidth: 1,
-    borderRadius: 5,
+    borderColor: "black",
+    borderWidth: 2,
+    borderRadius: 10,
     paddingHorizontal: 10,
     marginBottom: 20,
+    backgroundColor: colors.light,
   },
   errorText: {
     color: "red",
