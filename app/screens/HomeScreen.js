@@ -105,6 +105,7 @@ const HomeScreen = ({ navigation, route }) => {
                 subTitle={recipe.summary.replace(/<[^>]+>/g, "")}
                 price={recipe.pricePerServing}
                 imageUrl={recipe.image}
+                recipe={recipe}
               />
             ))}
             {loadingMore && (
